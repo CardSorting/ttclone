@@ -3,7 +3,8 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import Video, { VideoRef } from 'react-native-video';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, withSpring } from 'react-native-reanimated';
-import FeedService from '@/services/FeedService';
+import { serviceContainer } from '@/lib/ServiceContainer';
+import { FeedService } from '@/services/FeedService';
 import { FeedItem } from '@/types/feed';
 import VideoControls from '@/components/VideoControls';
 import FeedError from '@/components/FeedError';
@@ -20,7 +21,8 @@ const Feed = () => {
     try {
       setLoading(true);
       setError(null);
-      const feed = await FeedService.getFeed();
+      const feedService = serviceContainer.getService<FeedService>('FeedService');
+      const feed = await feedService.getFeed();
       setVideos(feed);
     } catch (err) {
       setError('Failed to load feed. Please try again.');
@@ -33,6 +35,14 @@ const Feed = () => {
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);
+
+  useEffect(() => {
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.seek(0);
+      }
+    };
+  }, []);
 
   const handleSwipe = useCallback((direction: 'up' | 'down') => {
     translateY.value = withSpring(direction === 'up' ? -100 : 100, {

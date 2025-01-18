@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { serviceContainer } from '@/lib/ServiceContainer';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -20,6 +21,14 @@ export default function RootLayout() {
   useEffect(() => {
     if (loaded) {
       SplashScreen.hideAsync();
+      
+      // Initialize services through service container
+      try {
+        const feedService = serviceContainer.getService('FeedService');
+        console.log('Services initialized successfully');
+      } catch (error) {
+        console.error('Failed to initialize services:', error);
+      }
     }
   }, [loaded]);
 

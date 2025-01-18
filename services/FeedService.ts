@@ -1,55 +1,40 @@
 import { FeedItem } from '@/types/feed';
-import { login, fetchFeed } from '@/lib/atproto';
 
-interface FeedResponseItem {
-  post: {
-    uri: string;
-    embed?: {
-      media?: {
-        images?: Array<{
-          fullsize: string;
-        }>;
-      };
-    };
-  };
+export interface FeedSource {
+  fetchFeed(): Promise<unknown[]>;
+  processFeedItem(rawItem: unknown): FeedItem | null;
 }
 
-class FeedService {
-  private static instance: FeedService;
-  private cache: FeedItem[] = [];
-  private lastFetchTime: number = 0;
-  private readonly CACHE_DURATION = 1000 * 60 * 5; // 5 minutes
+export interface CacheService {
+  get(key: string): FeedItem[] | null;
+  set(key: string, value: FeedItem[], ttl: number): void;
+  delete(key: string): void;
+}
 
-  private constructor() {}
+export class FeedService {
+  private feedSource: FeedSource;
+  private cacheService: CacheService;
+  private readonly CACHE_KEY = 'feed_cache';
+  private readonly CACHE_TTL = 1000 * 60 * 5; // 5 minutes
 
-  public static getInstance(): FeedService {
-    if (!FeedService.instance) {
-      FeedService.instance = new FeedService();
-    }
-    return FeedService.instance;
+  constructor(feedSource: FeedSource, cacheService: CacheService) {
+    this.feedSource = feedSource;
+    this.cacheService = cacheService;
   }
 
   public async getFeed(): Promise<FeedItem[]> {
-    const now = Date.now();
-    
-    if (this.cache.length > 0 && now - this.lastFetchTime < this.CACHE_DURATION) {
-      return this.cache;
+    const cachedFeed = this.cacheService.get(this.CACHE_KEY);
+    if (cachedFeed) {
+      return cachedFeed;
     }
 
     try {
-      await login();
-      const feed = await fetchFeed();
-      
-      const processedFeed = feed
-        .filter((item: FeedResponseItem) => item.post.embed?.media?.images?.[0]?.fullsize)
-        .map((item: FeedResponseItem) => ({
-          id: item.post.uri,
-          uri: item.post.embed?.media?.images?.[0]?.fullsize || '',
-        }))
-        .filter((item: FeedItem) => item.uri);
+      const rawFeed = await this.feedSource.fetchFeed();
+      const processedFeed = rawFeed
+        .map((item) => this.feedSource.processFeedItem(item))
+        .filter((item): item is FeedItem => item !== null);
 
-      this.cache = processedFeed;
-      this.lastFetchTime = now;
+      this.cacheService.set(this.CACHE_KEY, processedFeed, this.CACHE_TTL);
       return processedFeed;
     } catch (error) {
       console.error('Failed to fetch feed:', error);
@@ -58,9 +43,7 @@ class FeedService {
   }
 
   public async refreshFeed(): Promise<FeedItem[]> {
-    this.lastFetchTime = 0;
+    this.cacheService.delete(this.CACHE_KEY);
     return this.getFeed();
   }
 }
-
-export default FeedService.getInstance();
